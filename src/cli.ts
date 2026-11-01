@@ -27,7 +27,7 @@ const VERSION: string = (require("../package.json") as { version: string }).vers
 const HELP = `remote-done ${VERSION} - wait for a job (local or over ssh), then fetch, hook, exit meaningfully.
 
 USAGE
-  remote-done [target] <condition>... [timing] [fetch] [hooks] [output]
+  remote-done [wait] [target] <condition>... [timing] [fetch] [hooks] [output]
   remote-done run [target] --log LOG [--done RE] [--fail RE] ... -- CMD...     start CMD detached, then wait
 
 TARGET (default: local)
@@ -69,7 +69,7 @@ OUTPUT
   --no-caffeinate (macOS)   -h, --help   -V, --version
 
 EXIT CODES
-  0 done+fetched  1 fail  2 timeout  3 unreachable  4 done but fetch failed (teardown skipped)
+  0 done+fetched  1 fail  2 timeout  3 unreachable  4 done but fetch failed (teardown skipped unless forced)
   5 stalled  6 process exited, outcome unknown  7 host key changed  8 teardown/notify hook failed
   64 bad arguments  128+signo aborted (130 INT, 143 TERM, 129 HUP)
 
@@ -179,6 +179,8 @@ export function parseCli(argv: string[]): ParsedCli {
   if (args[0] === "run") {
     mode = "run";
     args = args.slice(1);
+  } else if (args[0] === "wait") {
+    args = args.slice(1); // explicit alias of the default mode: people type it by symmetry with `run`
   }
   let values: Record<string, unknown>;
   let positionals: string[];

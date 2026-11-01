@@ -58,12 +58,16 @@ terminal state -> fetch (statuses in --fetch-on) -> on-<status> hooks -> teardow
 ```
 
 - **fetch**: `--fetch 'REMOTE_GLOB[:LOCAL_DIR]'`, repeatable, `--rsync` to use rsync. Each entry
-  is retried 5x with backoff. An unmatched glob is a fetch error.
+  is retried 5x with backoff. An unmatched glob is a fetch error. `fetched` / `RD_FETCHED` list the
+  entries the glob matched (a matched directory is copied recursively and counts once).
 - **teardown** (`--teardown CMD`) is where destructive things go. It runs only when
   `(done AND every fetch succeeded)` or `(status != done AND status in --teardown-on)`.
   Default `--teardown-on done`. With `--profile pod` (= `--teardown-on all --fetch-on all
   --force-teardown-after 5`) every exit path fetches first and then tears down, which is what you
   want for an hourly-billed pod. `--force-teardown` tears down even when a fetch failed.
+  `--force-teardown-after MIN` only applies to a **done** job whose fetch keeps failing (exit 4):
+  for fail / timeout / unreachable / stalled / aborted the teardown follows the normal fetch
+  retries (5 tries, about 30 s), so a dead pod stops billing within seconds of being declared dead.
 - **hooks** (`--on-done/--on-fail/--on-timeout/--on-unreachable/--on-abort/--on-stalled`) run via
   `sh -c` with stdin = `/dev/null`, env `RD_STATUS RD_MATCH RD_FETCHED RD_FETCH_OK RD_ELAPSED_MS
   RD_TARGET RD_CTX_FILE` (a JSON file with the whole context), a 10 min timeout each, output
@@ -82,7 +86,7 @@ terminal state -> fetch (statuses in --fetch-on) -> on-<status> hooks -> teardow
 | 1 | fail marker / non-zero exit file / command failed |
 | 2 | timeout |
 | 3 | target unreachable past `--unreachable-after` (or auth refused) |
-| 4 | job done but a fetch failed; **teardown skipped**, pending command printed |
+| 4 | job done but a fetch failed; **teardown skipped** and the pending command printed - unless `--force-teardown` / `--force-teardown-after` ran it (still exit 4: the artifacts are not here) |
 | 5 | stalled (no progress for `--stall`) |
 | 6 | process exited, outcome unknown |
 | 7 | ssh host key changed (never retried; the one-line fix is printed) |
@@ -102,7 +106,7 @@ On exit 3-7 the teardown command that did **not** run is printed to stderr and k
   key that changes **during** a run stops the wait with exit 7. `insecure` disables checking
   (community pods), `strict` uses only your own known_hosts.
 - Polls are one ssh exec each; a `ControlMaster` option is planned for 0.2.
-- `remote-done run` starts the job as
+- `remote-done wait ...` is the same as plain `remote-done ...`; `remote-done run` starts the job as
   `nohup sh -c 'echo $$ > LOG.pid; (CMD) > LOG 2>&1; echo $? > LOG.rc' &`. If the connection
   drops right after the start, the pid file is probed before anything is started again.
 - RunPod: only pods with a public IP and exposed 22/tcp ("Full SSH"); the `ssh.runpod.io`

@@ -320,3 +320,28 @@ const r = await remoteDone({
 1. Name `remote-done` (alternatives: `wait-done`, `remote-wait`).
 2. Shell out to system ssh (zero deps) rather than `ssh2` - yes unless Windows remotes matter.
 3. Same stack/conventions as comfy-resolve (ESM-only, Node >= 20, tsup, vitest, MIT, no deps).
+
+## 2026-11-01 - M5 dogfood plan (Ryan: "先 M5 dogfood")
+
+Goal: run remote-done inside the real native-35 RunPod routine (`orchestrate.py` on ubuntugpu),
+replacing the hand-written monitor loop (pgrep poll / unreachable counter / final sync / terminate).
+
+Findings that shape the plan:
+- The native-35 batch finished on 2026-10-31 (state.json phase=done, 90719 JSONs local, 2 clips left
+  without JSON). There is no live run to attach to, so the dogfood needs a run of its own.
+- ubuntugpu has no Node; install Node 24 LTS user-level under ~/.local (no sudo).
+- ubuntugpu cannot ssh to itself (its key is not in its own authorized_keys), so a free
+  "pod stand-in" is only possible via docker (if usable) or the Mac; otherwise the real pod.
+
+Steps:
+1. Node 24 on ubuntugpu + `npm pack` remote-done locally + `npm i -g <tgz>` there (also validates the pack).
+2. orchestrate.py: keep grab/boot/upload/balance/periodic-sync/resume in Python; hand
+   start+wait+fetch+teardown to `remote-done run --json --profile pod` as a subprocess. Add
+   `--terminate POD` (teardown hook target) and `--dogfood` (process the leftover clips on the
+   cheapest community GPU, 20 min timeout) entry points.
+3. Verify: `--dry-run`, then a real run; record every rough edge in Findings.md.
+4. Acceptance per Plan v2.1: periodic sync / balance gate / resume / composite probe each covered
+   or explicitly left in Python; the wrapper still terminates on any rc != 0.
+- 2026-11-01 status: M5 done as a dogfood of the same orchestrate.py code path on cheap pods (the
+  native-35 batch had already finished). Remaining: M4 release (needs Ryan's web-auth click and the
+  repo flipped to public).

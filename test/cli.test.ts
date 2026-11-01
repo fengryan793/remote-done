@@ -70,6 +70,9 @@ describe("parseCli", () => {
     expect(() => parseCli(["run", "--", "cmd"])).toThrow(/--log/);
     expect(() => parseCli(["--ssh", "abc-123.ssh.runpod.io", "--exit-file", "/r"])).toThrow(/runpod/i);
     expect(() => parseCli(["--exit-file", "/r", "extra"])).toThrow(/unexpected argument/);
+    // `wait` is accepted as an explicit alias of the default mode (dogfood: the wrapper typed it by symmetry with `run`)
+    expect(parseCli(["wait", "--exit-file", "/r"]).mode).toBe("wait");
+    expect(parseCli(["wait", "--exit-file", "/r"]).spec.until).toEqual({ kind: "exitFile", path: "/r" });
   });
 });
 

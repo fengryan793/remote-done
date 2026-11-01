@@ -6,3 +6,6 @@
   commands, locally or over ssh; fetch artifacts (scp/rsync); on-status hooks, gated
   teardown (`--profile pod`), notify (ntfy, webhook, shell); `run` subcommand with a
   crash-safe detached start; NDJSON mode; meaningful exit codes (0-8, 64, 128+signo).
+- `remote-done wait ...` is accepted as an explicit alias of the default (wait) mode.
+- Dogfooded on real RunPod pods (done / abort / fail / stall / unreachable / fetch-failed):
+  every path fetched first and terminated the pod through the teardown hook.
