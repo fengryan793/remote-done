@@ -287,6 +287,8 @@ export function parseCli(argv: string[]): ParsedCli {
     if (conds.some((c) => c.kind !== "log")) throw new SpecError("run: only --log/--done/--fail conditions are allowed (the exit code comes from <log>.rc)");
     command = positionals.join(" ");
     until = { kind: "exitFile", path: `${str("log")}.rc` }; // replaced after start
+    // the job log is the natural progress source for --stall in run mode
+    if (str("stall") && !str("progress-log")) v["progress-log"] = str("log");
   } else {
     if (conds.length === 0) throw new SpecError("no condition given (try --log PATH --done RE, --exit-file, --process, --port, --http, --file or --cmd)");
     until = conds.length === 1 ? (conds[0] as Condition) : { kind: bool("any") ? "any" : "all", conditions: conds };

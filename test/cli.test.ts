@@ -51,6 +51,8 @@ describe("parseCli", () => {
     expect(p.mode).toBe("run");
     expect(p.command).toBe("python train.py --lr 0.1");
     expect(p.markers.fail?.source).toBe("Traceback");
+    const q = parseCli(["run", "--log", "/tmp/j.log", "--stall", "10m", "--", "python", "x.py"]);
+    expect(q.spec.progressLog).toBe("/tmp/j.log"); // the job log is the stall source
   });
 
   it("rejects bad arguments with SpecError", () => {

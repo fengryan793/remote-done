@@ -2,7 +2,9 @@ import { mkdirSync, readdirSync, readFileSync, statSync, unlinkSync, writeFileSy
 import { homedir } from "node:os";
 import { join } from "node:path";
 
-const PRUNE_AFTER_MS = 7 * 86_400_000;
+const PRUNE_STATE_AFTER_MS = 7 * 86_400_000;
+// a per-run known_hosts pin must outlive any plausible run, so it is kept much longer
+const PRUNE_KNOWN_HOSTS_AFTER_MS = 90 * 86_400_000;
 
 export function cacheDir(): string {
   return (
@@ -57,24 +59,32 @@ export function finishState(id: string, finished: NonNullable<StateFile["finishe
   }
 }
 
-/** Delete state and known_hosts files older than a week. */
+/** Delete finished state files older than a week and known_hosts pins older than 90 days. */
 export function pruneOld(now = Date.now()): void {
-  for (const dir of [cacheDir(), knownHostsDir()]) {
+  const sweep = (dir: string, maxAgeMs: number, keep: (p: string) => boolean) => {
     let names: string[];
     try {
       names = readdirSync(dir);
     } catch {
-      continue;
+      return;
     }
     for (const n of names) {
       const p = join(dir, n);
       try {
-        if (now - statSync(p).mtimeMs > PRUNE_AFTER_MS) unlinkSync(p);
+        if (now - statSync(p).mtimeMs > maxAgeMs && !keep(p)) unlinkSync(p);
       } catch {
         /* ignore */
       }
     }
-  }
+  };
+  sweep(cacheDir(), PRUNE_STATE_AFTER_MS, (p) => {
+    try {
+      return (JSON.parse(readFileSync(p, "utf8")) as StateFile).finished === undefined;
+    } catch {
+      return false;
+    }
+  });
+  sweep(knownHostsDir(), PRUNE_KNOWN_HOSTS_AFTER_MS, () => false);
 }
 
 export function newRunId(): string {
