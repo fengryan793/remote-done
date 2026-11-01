@@ -30,3 +30,5 @@ Runs 41268363962 (fde833c) and 41268440562 (e83f42a): ubuntu-latest and macos-la
 enable `ssh localhost` (RD_TEST_SSH=1 exported on every leg, so the 7 ssh integration tests
 ran on GNU and BSD userlands). macOS x node 20/22/24/26: PASS. ubuntu x node 20/22/24/26:
 FAIL on one test (hook timeout, dash orphan - see Findings). Fix pushed; result below.
+Run for 2da0deb (process-group fix): **all 8 legs PASS** (ubuntu-latest + macos-latest x node
+20/22/24/26, ssh integration included on every leg). https://github.com/fengryan793/remote-done/actions
