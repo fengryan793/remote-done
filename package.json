@@ -1,0 +1,64 @@
+{
+  "name": "remote-done",
+  "version": "0.1.0",
+  "description": "Wait for a long job (local or over ssh) to finish, then fetch its artifacts, run hooks (notify, teardown) and exit with a meaningful code. wait-on for remote jobs. Zero runtime dependencies.",
+  "keywords": [
+    "wait",
+    "wait-on",
+    "ssh",
+    "remote",
+    "poll",
+    "log",
+    "tail",
+    "gpu",
+    "runpod",
+    "teardown",
+    "notify",
+    "cli"
+  ],
+  "license": "MIT",
+  "author": "Ryan Feng",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/fengryan793/remote-done.git"
+  },
+  "homepage": "https://github.com/fengryan793/remote-done#readme",
+  "bugs": {
+    "url": "https://github.com/fengryan793/remote-done/issues"
+  },
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "bin": {
+    "remote-done": "dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "lint": "tsc --noEmit",
+    "prepublishOnly": "npm run typecheck && npm test && npm run build"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.0",
+    "tsup": "^8.5.0",
+    "typescript": "^5.8.0",
+    "vitest": "^3.2.0"
+  }
+}

@@ -1,0 +1,59 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    name: ${{ matrix.os }} / node ${{ matrix.node }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        node: [20, 22, 24, 26]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+
+      # The ssh integration tests run the remote recipes (stat/tail/pgrep/run/scp)
+      # against `ssh localhost`, so every CI run exercises both the GNU (ubuntu)
+      # and BSD (macos) userlands.
+      - name: Enable ssh localhost
+        shell: bash
+        run: |
+          set -x
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          [ -f ~/.ssh/id_ed25519 ] || ssh-keygen -q -t ed25519 -N '' -f ~/.ssh/id_ed25519
+          cat ~/.ssh/id_ed25519.pub >> ~/.ssh/authorized_keys
+          chmod 600 ~/.ssh/authorized_keys
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            sudo systemctl start ssh || sudo service ssh start || true
+          else
+            sudo systemsetup -setremotelogin on || sudo launchctl load -w /System/Library/LaunchDaemons/ssh.plist || true
+          fi
+          for i in 1 2 3 4 5; do ssh-keyscan -H localhost >> ~/.ssh/known_hosts 2>/dev/null && break; sleep 2; done
+          if ssh -o BatchMode=yes -o ConnectTimeout=10 localhost true; then
+            echo "RD_TEST_SSH=1" >> "$GITHUB_ENV"
+          elif [ "$RUNNER_OS" = "Linux" ]; then
+            echo "::error::ssh localhost is not working on the Linux runner"; exit 1
+          else
+            echo "::warning::ssh localhost unavailable on this macOS runner; ssh integration tests will be skipped"
+          fi
+
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      - name: Smoke-test the built CLI
+        shell: bash
+        run: |
+          node dist/cli.js --version
+          printf 'hello\n' > /tmp/rd-smoke.log
+          (sleep 2; echo DONE >> /tmp/rd-smoke.log) &
+          node dist/cli.js --log /tmp/rd-smoke.log --done DONE --interval 1s --timeout 30s --from-start
