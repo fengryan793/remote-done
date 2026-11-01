@@ -39,10 +39,23 @@ export function spawnCapture(
     const err: Buffer[] = [];
     let timedOut = false;
     let settled = false;
-    const spawnOpts: Parameters<typeof spawn>[2] = { stdio: ["ignore", "pipe", "pipe"] };
+    // own process group so a timeout kills `sh -c`'s children too (dash does not exec them)
+    const spawnOpts: Parameters<typeof spawn>[2] = { stdio: ["ignore", "pipe", "pipe"], detached: true };
     if (opts.env) spawnOpts.env = opts.env;
     if (opts.cwd) spawnOpts.cwd = opts.cwd;
     const child = spawn(cmd, args, spawnOpts);
+    const killGroup = (sig: NodeJS.Signals) => {
+      try {
+        if (child.pid) process.kill(-child.pid, sig);
+        else child.kill(sig);
+      } catch {
+        try {
+          child.kill(sig);
+        } catch {
+          /* gone */
+        }
+      }
+    };
     child.stdout?.on("data", (d: Buffer) => out.push(d));
     child.stderr?.on("data", (d: Buffer) => err.push(d));
     let killTimer: NodeJS.Timeout | undefined;
@@ -50,8 +63,8 @@ export function spawnCapture(
     if (opts.timeoutMs !== undefined && opts.timeoutMs > 0) {
       timer = setTimeout(() => {
         timedOut = true;
-        child.kill("SIGTERM");
-        killTimer = setTimeout(() => child.kill("SIGKILL"), 5000);
+        killGroup("SIGTERM");
+        killTimer = setTimeout(() => killGroup("SIGKILL"), 5000);
       }, opts.timeoutMs);
     }
     const finish = (r: Omit<SpawnCapture, "stdout" | "stderr" | "timedOut">) => {
@@ -63,6 +76,8 @@ export function spawnCapture(
     };
     child.on("error", (e: NodeJS.ErrnoException) => finish({ code: null, signal: null, spawnError: e }));
     child.on("close", (code, signal) => finish({ code, signal }));
+    // a grandchild holding the pipes must not block us for long after the child exited
+    child.on("exit", (code, signal) => setTimeout(() => finish({ code, signal }), 1000).unref());
   });
 }
 

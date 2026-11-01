@@ -16,3 +16,9 @@
   that behaviour instead of pretending it is detected.
 - Run ids are UTC timestamps (`20261101-031245-xxxx` at 20:12 PDT); harmless but worth knowing
   when reading `~/.cache/remote-done/`.
+- First CI run: all macOS legs green (ssh localhost works on macos-latest, so the integration
+  tests ran there too) and every ubuntu leg failed exactly one test, "hook timeout kills the
+  hook": `/bin/sh` is dash on Ubuntu and dash does not exec the last command of `sh -c`, so
+  killing `sh` leaves the `sleep` orphan holding our stdout/stderr pipes until it ends (30 s).
+  Fix: hooks and local commands run `detached` in their own process group, the group is killed
+  on timeout, and a 1 s grace after `exit` stops any grandchild from blocking us.

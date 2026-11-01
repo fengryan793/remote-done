@@ -267,7 +267,7 @@ describe("engine terminal pipeline", () => {
   it("hook timeout kills the hook and records timedOut", async () => {
     const log = t.path("job.log");
     writeFileSync(log, "DONE\n");
-    const { result } = await run({ until: c.log(log, { done: "DONE", fromStart: true }), interval: 10, onDone: ["sleep 30"], hookTimeout: 300 });
+    const { result } = await run({ until: c.log(log, { done: "DONE", fromStart: true }), interval: 10, onDone: ["sleep 30 | cat"], hookTimeout: 300 });
     expect(result.hooks[0]?.timedOut).toBe(true);
     expect(result.exitCode).toBe(0); // onDone failures do not change the job outcome
   });

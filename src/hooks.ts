@@ -3,12 +3,32 @@
  * swallow the engine's stdin), the context in RD_* env vars and a JSON file (RD_CTX_FILE),
  * stdout/stderr captured (last 4 KiB). Only the engine ever writes to the process stdout.
  */
-import { spawn } from "node:child_process";
+import { spawn, type ChildProcess } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { tailText } from "./shell.js";
 import type { Hook, HookContext, HookResult } from "./types.js";
+
+const running = new Set<ChildProcess>();
+
+function killGroup(child: ChildProcess, sig: NodeJS.Signals): void {
+  try {
+    if (child.pid) process.kill(-child.pid, sig);
+    else child.kill(sig);
+  } catch {
+    try {
+      child.kill(sig);
+    } catch {
+      /* already gone */
+    }
+  }
+}
+
+// a second Ctrl-C exits at once: take any still-running hook down with us
+process.on("exit", () => {
+  for (const ch of running) killGroup(ch, "SIGTERM");
+});
 
 export interface HookRunOptions {
   timeoutMs: number;
@@ -71,15 +91,22 @@ export async function runHook(hook: Hook, ctx: HookContext, opts: HookRunOptions
     return await new Promise<HookResult>((resolve) => {
       const chunks: Buffer[] = [];
       let timedOut = false;
-      const child = spawn("sh", ["-c", hook], { stdio: ["ignore", "pipe", "pipe"], env });
+      // Own process group: on timeout the whole group is killed, so a `sh -c` that did not
+      // exec its child (dash) cannot leave an orphan holding our pipes open.
+      const child = spawn("sh", ["-c", hook], { stdio: ["ignore", "pipe", "pipe"], env, detached: true });
+      running.add(child);
       child.stdout?.on("data", (d: Buffer) => chunks.push(d));
       child.stderr?.on("data", (d: Buffer) => chunks.push(d));
       const timer = setTimeout(() => {
         timedOut = true;
-        child.kill("SIGTERM");
-        setTimeout(() => child.kill("SIGKILL"), 5000).unref();
+        killGroup(child, "SIGTERM");
+        setTimeout(() => killGroup(child, "SIGKILL"), 5000).unref();
       }, opts.timeoutMs);
+      let settled = false;
       const done = (exitCode: number | null, error?: string) => {
+        if (settled) return;
+        settled = true;
+        running.delete(child);
         clearTimeout(timer);
         const output = tailText(Buffer.concat(chunks).toString("utf8"));
         resolve({
@@ -93,7 +120,11 @@ export async function runHook(hook: Hook, ctx: HookContext, opts: HookRunOptions
         });
       };
       child.on("error", (e) => done(null, e.message));
-      child.on("close", (code, signal) => done(code ?? (signal ? 128 : null), signal ? `killed by ${signal}` : undefined));
+      const finish = (code: number | null, signal: NodeJS.Signals | null) =>
+        done(code ?? (signal ? 128 : null), signal ? `killed by ${signal}` : undefined);
+      child.on("close", finish);
+      // if a grandchild keeps the pipes open, do not wait for it beyond a short grace
+      child.on("exit", (code, signal) => setTimeout(() => finish(code, signal), 1000).unref());
     });
   } finally {
     rmSync(dir, { recursive: true, force: true });

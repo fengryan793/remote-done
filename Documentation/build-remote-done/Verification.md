@@ -23,3 +23,10 @@ Not yet verified: CI on GitHub (first push pending), Node 22/24/26 locally (only
 `--host-key` changed-key path against a real changed server key (classification is unit-tested
 on captured stderr only), rsync fetch end-to-end (scp path only), ntfy/webhook notifiers (no
 network test), `--deadman` on a remote host, long runs (hours) with real network drops.
+
+## 2026-10-31 (late) - GitHub CI
+
+Runs 41268363962 (fde833c) and 41268440562 (e83f42a): ubuntu-latest and macos-latest both
+enable `ssh localhost` (RD_TEST_SSH=1 exported on every leg, so the 7 ssh integration tests
+ran on GNU and BSD userlands). macOS x node 20/22/24/26: PASS. ubuntu x node 20/22/24/26:
+FAIL on one test (hook timeout, dash orphan - see Findings). Fix pushed; result below.
