@@ -63,3 +63,7 @@ resume mode live, a changed host key on a real pod, ntfy/webhook notifiers.
 ## 2026-11-01 repo visibility
 
 - API returned private=false visibility=public; anonymous GET of the repo page returned the status code logged above.
+
+## 2026-11-01 M4 publish check
+
+- `npm i remote-done@0.1.0` into an empty folder, `remote-done --version`, a local `--exit-file` wait that exited 0, and an ESM `import("remote-done")` all worked against the registry copy.

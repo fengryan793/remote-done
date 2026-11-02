@@ -108,3 +108,7 @@
 | `--profile pod` | used for every invocation. |
 
 Cost of all six live runs: about 6 pod-minutes x6 on $0.12-0.13/h GPUs, well under $0.10.
+
+## 2026-11-01 - npm publish needs a TTY
+
+- `npm publish` with the Keychain token and no TTY fails with EOTP rather than printing a web-auth link. Run it in a terminal tab with `--auth-type=web` so the `/auth/cli` link appears.

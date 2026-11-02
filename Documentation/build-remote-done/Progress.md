@@ -52,3 +52,9 @@
 ## 2026-11-01 repo made public
 
 - Ryan asked to flip https://github.com/fengryan793/remote-done to public; done with REST PATCH {"private":false} using the github_ryan PAT (gh CLI is logged in as heroku514, and the github_ryan MCP has no update-repo tool). History secret scan was clean first.
+
+## 2026-11-01 M4 publish
+
+- CHANGELOG dated 0.1.0 (2026-11-01); typecheck, 61 tests, build and `npm pack --dry-run` (8 files, 142.6 kB) clean; commit 5fd83be pushed.
+- First `npm publish` run in the background (stdout to a file) failed with EOTP: with no TTY npm asks for an OTP instead of offering web auth. Re-ran in a Terminal tab with `--auth-type=web`; npm printed a `/auth/cli/<id>` link, Ryan approved it, npm answered `+ remote-done@0.1.0` (package first shows as `0.0.0-stage`).
+- Tag v0.1.0 pushed; GitHub release https://github.com/fengryan793/remote-done/releases/tag/v0.1.0 created via REST with the github_ryan PAT.
