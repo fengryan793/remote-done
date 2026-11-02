@@ -197,13 +197,15 @@ export type HookPhase =
   | "onUnreachable"
   | "onAbort"
   | "onStalled"
+  | "every"
   | "teardown"
   | "notify";
 
 export interface HookContext {
   id: string;
   phase: HookPhase;
-  status: Status;
+  /** "running" only for `every` hooks: the job has not reached a terminal state yet. */
+  status: Status | "running";
   target: string;
   matched?: string;
   fetched: string[];
@@ -248,6 +250,15 @@ export interface FetchError {
 
 export type StatusSelector = Status | "all";
 
+export interface EverySpec {
+  /** Time between ticks. A tick that overruns skips the ticks it missed. */
+  interval: Duration;
+  /** Copied on each tick. Default: the top-level `fetch`; `[]` copies nothing. */
+  fetch?: FetchSpec[];
+  /** Run on each tick, with status "running". */
+  hook?: Hook[];
+}
+
 // ---------------------------------------------------------------------------
 // Spec and Result
 // ---------------------------------------------------------------------------
@@ -274,6 +285,8 @@ export interface Spec {
   fetch?: FetchSpec[];
   /** Statuses that trigger a (best-effort) fetch. Default ["done","fail","timeout"]. */
   fetchOn?: StatusSelector[];
+  /** Periodic work while the job runs. Failures are reported and never end the wait. */
+  every?: EverySpec;
   /** Destructive cleanup. Runs when (done AND fetched) OR (status != done AND status in teardownOn). */
   teardown?: Hook[];
   /** Default ["done"]; "done" always means done-and-fetched. */
@@ -340,6 +353,7 @@ export type Event =
   | { type: "reconnect"; attempt: number; delayMs: number; error: string; downMs: number }
   | { type: "reconnected"; downMs: number }
   | { type: "fetch"; from: string; to: string; ok: boolean; files?: string[]; error?: string; attempt: number }
+  | { type: "tick"; n: number; files: number; errors: string[]; ms: number }
   | { type: "hook"; result: HookResult }
   | { type: "deadman"; action: "armed" | "disarmed" | "failed"; detail?: string }
   | { type: "warn"; message: string }

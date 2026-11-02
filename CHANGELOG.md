@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.0 (unreleased)
+
+- `every`: periodic work while the job runs. `--every 30m` copies the `--fetch` entries on a
+  schedule; `--every-fetch` and `--every-hook` give each tick its own work. Failures are reported
+  as `tick` events and never change the outcome.
+- Hooks get `RD_PID`, so a hook can stop the wait with `kill -TERM "$RD_PID"`.
+
 ## 0.1.1 (2026-11-01)
 
 - A fetch glob that matches nothing is no longer retried (5 attempts, then 5 min of

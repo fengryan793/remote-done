@@ -90,6 +90,32 @@ d("SshTransport against a real sshd", () => {
     expect(readFileSync(local.path("dl2/result.txt"), "utf8")).toBe("DONE\n");
   });
 
+  it("every: copies partial outputs while the job runs", async () => {
+    const log = `${remoteDir}/every.log`;
+    const started = await startDetached(transport, `echo one > ${remoteDir}/ckpt-1.txt; sleep 4; echo two > ${remoteDir}/ckpt-2.txt`, log);
+    let partial = false;
+    const result = await remoteDone(
+      {
+        target,
+        until: runCondition(started),
+        interval: "300ms",
+        timeout: "60s",
+        every: { interval: "1s" },
+        fetch: [{ from: `${remoteDir}/ckpt-*.txt`, to: local.path("dl3") }],
+      },
+      {
+        transport,
+        stateFile: false,
+        onEvent: (e) => {
+          if (e.type === "tick" && e.files === 1) partial = true;
+        },
+      },
+    );
+    expect(result.exitCode).toBe(0);
+    expect(partial).toBe(true);
+    expect(readFileSync(local.path("dl3/ckpt-2.txt"), "utf8")).toBe("two\n");
+  });
+
   it("a failing remote job is fail (exit 1), not exited", async () => {
     const log = `${remoteDir}/bad.log`;
     const started = await startDetached(transport, `echo nope; exit 9`, log);

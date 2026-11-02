@@ -58,3 +58,14 @@
 - CHANGELOG dated 0.1.0 (2026-11-01); typecheck, 61 tests, build and `npm pack --dry-run` (8 files, 142.6 kB) clean; commit 5fd83be pushed.
 - First `npm publish` run in the background (stdout to a file) failed with EOTP: with no TTY npm asks for an OTP instead of offering web auth. Re-ran in a Terminal tab with `--auth-type=web`; npm printed a `/auth/cli/<id>` link, Ryan approved it, npm answered `+ remote-done@0.1.0` (package first shows as `0.0.0-stage`).
 - Tag v0.1.0 pushed; GitHub release https://github.com/fengryan793/remote-done/releases/tag/v0.1.0 created via REST with the github_ryan PAT.
+
+## 2026-11-01 0.1.1 and every
+
+- 0.1.1 fix committed on main (f51cbb4), CI green (run 41376926569). Not published: the auto-mode classifier refused `npm publish` this time, so it waits for Ryan.
+- `every` built on branch `every` in a separate worktree, so main stays publishable (`npm publish` packs the working tree).
+- Added `EverySpec`, the `tick` event, the `every` hook phase, `RD_PID`, and `--every`, `--every-fetch`, `--every-hook`, `--every-no-fetch`.
+
+## 2026-11-01 0.1.1 released
+
+- Ryan approved the publish in chat. Published from main at f51cbb4 in a Terminal tab with `--auth-type=web`, after Ryan approved the web-auth link. Tag v0.1.1 and GitHub release created.
+- PR #1 (every) CI finished green on all legs (run 41379166401).

@@ -42,6 +42,7 @@ export function hookName(h: Hook): string {
 export function hookEnv(ctx: HookContext): NodeJS.ProcessEnv {
   return {
     RD_ID: ctx.id,
+    RD_PID: String(process.pid),
     RD_PHASE: ctx.phase,
     RD_STATUS: ctx.status,
     RD_TARGET: ctx.target,

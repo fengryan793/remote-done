@@ -50,6 +50,10 @@ LOG.pid` as its very first action.
 
 ## 3. Fetch policy and teardown gating
 
+`every` (0.2): ticks run beside the polls while the state is pending and the target is reachable,
+one at a time, skipping missed ticks; a tick error never changes the status. The terminal pipeline
+waits for a tick in flight (bounded by the hook timeout) before the final fetch.
+
 - fetch runs when `status in fetchOn` (default done,fail,timeout; `all` allowed); each entry is
   retried 5x with 2 s -> 30 s backoff; `stableFor`/`minBytes` are honoured via a remote
   `stat`-sum before copying (5 min readiness budget); an unmatched glob is a fetch error.

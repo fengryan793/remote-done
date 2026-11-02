@@ -51,6 +51,26 @@ Give one or more; several are combined with **all** (or `--any`).
 Timing: `--interval 15s` (default), `--timeout 2h`, `--stall 20m` (needs a change source: a
 log/file/http/cmd condition or `--progress-log PATH`), `--unreachable-after 10m`.
 
+## While the job runs
+
+`--every 30m` copies your `--fetch` entries on a schedule, so a pod that dies at hour 11 costs you
+at most 30 minutes of checkpoints. Use `--rsync`: scp copies everything again on each tick.
+
+```bash
+remote-done run --ssh gpu --log /workspace/run.log --timeout 48h --stall 30m \
+  --fetch '/workspace/out/*:./out' --rsync --every 30m \
+  --every-hook 'test "$(./balance.sh)" -gt 5 || kill -TERM "$RD_PID"' \
+  --teardown './stop-pod.sh' --profile pod -- python train.py
+```
+
+- `--every-fetch 'GLOB[:DIR]'` copies something other than `--fetch` (repeatable);
+  `--every-no-fetch` copies nothing, for a tick that only runs its hook.
+- `--every-hook CMD` runs a command on each tick (repeatable), with `RD_STATUS=running`. Killing
+  `$RD_PID` with SIGTERM stops the wait through the normal abort path: fetch, teardown, exit 143.
+- Ticks run beside the polls, one at a time, and a tick that overruns skips the ones it missed.
+  None run while the target is unreachable. The final fetch waits for a tick in flight.
+- A failed tick is reported (`tick` event in `--json`) and never changes the outcome.
+
 ## What happens at the end
 
 ```
@@ -58,7 +78,9 @@ terminal state -> fetch (statuses in --fetch-on) -> on-<status> hooks -> teardow
 ```
 
 - **fetch**: `--fetch 'REMOTE_GLOB[:LOCAL_DIR]'`, repeatable, `--rsync` to use rsync. Each entry
-  is retried 5x with backoff. An unmatched glob is a fetch error. `fetched` / `RD_FETCHED` list the
+  is retried 5x with backoff. An unmatched glob is a fetch error, and it stops the retries as soon
+  as an exit file or a gone process proves the job ended; after a log marker it keeps retrying,
+  because a job may print `DONE` before its outputs are written. `fetched` / `RD_FETCHED` list the
   entries the glob matched (a matched directory is copied recursively and counts once).
 - **teardown** (`--teardown CMD`) is where destructive things go. It runs only when
   `(done AND every fetch succeeded)` or `(status != done AND status in --teardown-on)`.
@@ -70,7 +92,7 @@ terminal state -> fetch (statuses in --fetch-on) -> on-<status> hooks -> teardow
   retries (5 tries, about 30 s), so a dead pod stops billing within seconds of being declared dead.
 - **hooks** (`--on-done/--on-fail/--on-timeout/--on-unreachable/--on-abort/--on-stalled`) run via
   `sh -c` with stdin = `/dev/null`, env `RD_STATUS RD_MATCH RD_FETCHED RD_FETCH_OK RD_ELAPSED_MS
-  RD_TARGET RD_CTX_FILE` (a JSON file with the whole context), a 10 min timeout each, output
+  RD_TARGET RD_PID RD_CTX_FILE` (a JSON file with the whole context), a 10 min timeout each, output
   captured. `unreachable`, `aborted`, `stalled` and `exited` are **notify-only** by default: they
   never fall back to `--on-fail`, so a flaky network cannot trigger your failure handler.
 - **notify** (`--notify`) runs for every terminal state: `ntfy://ntfy.sh/topic`, an
