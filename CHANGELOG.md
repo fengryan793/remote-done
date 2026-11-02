@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.1.0 (unreleased)
+## 0.1.0 (2026-11-01)
 
 - First release: wait for log markers / exit files / processes / ports / http / files /
   commands, locally or over ssh; fetch artifacts (scp/rsync); on-status hooks, gated

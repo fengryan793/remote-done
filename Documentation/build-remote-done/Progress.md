@@ -48,3 +48,7 @@
 - Run 6 (fetchfail) passed. Fixed README exit-code row 4 and the `--help` line (teardown skipped
   *unless forced*). CHANGELOG notes the `wait` alias and the dogfood. Suite 61/61, tsc clean.
 - Wrote the M5 acceptance table (Findings) and Verification section.
+
+## 2026-11-01 repo made public
+
+- Ryan asked to flip https://github.com/fengryan793/remote-done to public; done with REST PATCH {"private":false} using the github_ryan PAT (gh CLI is logged in as heroku514, and the github_ryan MCP has no update-repo tool). History secret scan was clean first.

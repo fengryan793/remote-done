@@ -59,3 +59,7 @@ Not verified live: the full native-35 `main()` loop on an H100 (the batch is fin
 below the 50-clip threshold, so `main()` exits at once), the in-run periodic sync and balance branch
 of `monitor()` (SYNC_S = 600 s never reached in a 2-6 min run; the SIGTERM path it uses is run 2),
 resume mode live, a changed host key on a real pod, ntfy/webhook notifiers.
+
+## 2026-11-01 repo visibility
+
+- API returned private=false visibility=public; anonymous GET of the repo page returned the status code logged above.
