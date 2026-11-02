@@ -127,7 +127,7 @@ On exit 3-7 the teardown command that did **not** run is printed to stderr and k
   `~/.local/state/remote-done/known_hosts.d/`, so a reused ip:port never meets a stale pin, and a
   key that changes **during** a run stops the wait with exit 7. `insecure` disables checking
   (community pods), `strict` uses only your own known_hosts.
-- Polls are one ssh exec each; a `ControlMaster` option is planned for 0.2.
+- Polls are one ssh exec each; a `ControlMaster` option is planned.
 - `remote-done wait ...` is the same as plain `remote-done ...`; `remote-done run` starts the job as
   `nohup sh -c 'echo $$ > LOG.pid; (CMD) > LOG 2>&1; echo $? > LOG.rc' &`. If the connection
   drops right after the start, the pid file is probed before anything is started again.

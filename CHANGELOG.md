@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.2.0 (unreleased)
+## 0.2.0 (2026-11-01)
 
 - `every`: periodic work while the job runs. `--every 30m` copies the `--fetch` entries on a
   schedule; `--every-fetch` and `--every-hook` give each tick its own work. Failures are reported
