@@ -75,3 +75,9 @@
 - PR #1 merged (a41ea36), version bumped, node_modules symlink removed (ea5cee2), main CI green (run 41385671680).
 - First publish attempt: the web-auth link expired unapproved (npm E404 on `/-/v1/done`), nothing published. Second attempt used `--ignore-scripts` so the link appeared in seconds, with the dist built by the first attempt from the same commit. Ryan approved it; `+ remote-done@0.2.0`.
 - Tag v0.2.0 and GitHub release created. The `every` branch is deleted.
+
+## 2026-11-01 orchestrate.py moved to --every
+
+- Installed remote-done@0.2.0 on ubuntugpu. In `native35-runpod/orchestrate.py` (Mac and ubuntugpu, backups `orchestrate.py.bak-rd-0.1`) the Python sync and balance loop is gone: `rd_command` adds `--every 600s --every-hook 'orchestrate.py --tick OUT MIN'`, and `monitor()` only mirrors events now.
+- `tick_hook` logs local files and balance, and below the minimum sends SIGTERM to `RD_PID`. Dogfood runs do not write state.json.
+- Added dogfood scenarios `sync` and `lowbalance`, and widened DOGFOOD_GPUS to 17 types after all four old ones were out of stock.

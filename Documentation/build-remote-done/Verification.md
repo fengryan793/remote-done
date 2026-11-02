@@ -83,3 +83,13 @@ resume mode live, a changed host key on a real pod, ntfy/webhook notifiers.
 
 - `npm i remote-done@0.2.0` into an empty folder: `--version` 0.2.0, and a local run with `--every` and `--every-hook` produced ticks that copied the file, then finished done, exit 0.
 - Still not verified: a real RunPod pod, a multi-hour sync, and the bounded wait on a hung tick. orchestrate.py still uses its own sync loop.
+
+## 2026-11-01 --every on real RunPod pods
+
+| scenario | pod | result |
+| --- | --- | --- |
+| sync | V100 $0.19/h | 5 ticks during the job brought local files 2, 4, 5, 7, 9; done, exit 0, final fetch 9, torn down |
+| lowbalance | V100 $0.19/h | first tick saw balance below the minimum; aborted, exit 143, fetched 1, torn down |
+
+- Pod list empty afterwards, state.json phase unchanged, both runs together cost $0.0135 (balance 98.0117 to 97.9982).
+- Not verified: the H100 `main()` loop, `tick_hook` writing state.json on the real path, resume mode with `--every`, a multi-hour sync, a hung tick, a changed host key, ntfy and webhook.
