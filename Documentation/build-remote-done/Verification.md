@@ -74,3 +74,7 @@ resume mode live, a changed host key on a real pod, ntfy/webhook notifiers.
 - ssh: `RD_TEST_SSH=1 RD_TEST_SSH_HOST=ubuntugpu npx vitest run test/ssh.test.ts` passed 8 of 8, including the new every test.
 - Built CLI against ubuntugpu: `run --rsync --every 2s --every-hook ... --profile pod` copied the partial output during the job and finished exit 0; a hook running `kill -TERM $RD_PID` gave aborted, exit 143, with fetch and teardown run.
 - Not verified: a real RunPod pod, a real multi-hour sync, the bounded wait on a hung tick, and the 8-leg CI until the PR runs.
+
+## 2026-11-01 0.1.1 from npm
+
+- `npm i remote-done@0.1.1` into an empty folder, `--version` printed 0.1.1. A done exit file with an unmatched glob and `--profile pod` made 1 fetch attempt instead of 25, tore down at once and exited 4.
