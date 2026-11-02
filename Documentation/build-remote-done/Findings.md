@@ -124,3 +124,8 @@ Cost of all six live runs: about 6 pod-minutes x6 on $0.12-0.13/h GPUs, well und
 - `RD_PID` gives a hook a way to stop the wait, which is what orchestrate.py's balance gate needs. It goes through the abort path, so fetch and teardown still run. Status codes from the hook would have added a second abort mechanism.
 - **Bug found by the first live run, not by the tests:** the first version used the top-level fetch only when no hook was given, so adding `--every-hook` silently switched the sync off, and the README example did exactly that. `--every` now always syncs; `--every-no-fetch` opts out.
 - orchestrate.py is unchanged. Its balance check and sync loop could move to `--every`/`--every-hook`, but that needs 0.2 published first and installed on ubuntugpu.
+
+## 2026-11-01 - node_modules symlink committed by mistake
+
+- The `every` worktree used a symlink to the main checkout's node_modules. `.gitignore` had `node_modules/`, which matches directories only, so `git add -A` committed the symlink (429c697). It reached public main through the merge of PR #1, and `git pull` replaced the real local node_modules with it. Tests then printed nothing, which is how it was caught, before 0.2.0 was published.
+- Fixed: symlink removed, `.gitignore` now says `node_modules`, `npm ci` restored the folder. The symlink target path stays in git history; history was not rewritten.
