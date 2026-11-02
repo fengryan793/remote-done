@@ -69,3 +69,9 @@
 
 - Ryan approved the publish in chat. Published from main at f51cbb4 in a Terminal tab with `--auth-type=web`, after Ryan approved the web-auth link. Tag v0.1.1 and GitHub release created.
 - PR #1 (every) CI finished green on all legs (run 41379166401).
+
+## 2026-11-01 0.2.0 released
+
+- PR #1 merged (a41ea36), version bumped, node_modules symlink removed (ea5cee2), main CI green (run 41385671680).
+- First publish attempt: the web-auth link expired unapproved (npm E404 on `/-/v1/done`), nothing published. Second attempt used `--ignore-scripts` so the link appeared in seconds, with the dist built by the first attempt from the same commit. Ryan approved it; `+ remote-done@0.2.0`.
+- Tag v0.2.0 and GitHub release created. The `every` branch is deleted.

@@ -78,3 +78,8 @@ resume mode live, a changed host key on a real pod, ntfy/webhook notifiers.
 ## 2026-11-01 0.1.1 from npm
 
 - `npm i remote-done@0.1.1` into an empty folder, `--version` printed 0.1.1. A done exit file with an unmatched glob and `--profile pod` made 1 fetch attempt instead of 25, tore down at once and exited 4.
+
+## 2026-11-01 0.2.0 from npm
+
+- `npm i remote-done@0.2.0` into an empty folder: `--version` 0.2.0, and a local run with `--every` and `--every-hook` produced ticks that copied the file, then finished done, exit 0.
+- Still not verified: a real RunPod pod, a multi-hour sync, and the bounded wait on a hung tick. orchestrate.py still uses its own sync loop.
