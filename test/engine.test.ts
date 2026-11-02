@@ -1,6 +1,6 @@
 import { appendFileSync, existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { remoteDone, watch } from "../src/engine.js";
+import { normalizeSpec, remoteDone, watch } from "../src/engine.js";
 import { conditions as c } from "../src/index.js";
 import { HostKeyError, TransportError, type Event, type Spec } from "../src/types.js";
 import { FakeTransport, tmp, virtualClock } from "./helpers.js";
@@ -67,6 +67,102 @@ describe("fetch of a glob that matches nothing", () => {
     });
     expect(attempts(events)).toBeGreaterThan(5);
     expect(result.exitCode).toBe(4);
+  });
+});
+
+describe("every: periodic work while the job runs", () => {
+  /** Real clock: a tick runs beside the polls, so virtual time would race past it. */
+  async function live(spec: Spec, onEvent?: (e: Event) => void) {
+    const c2 = collect();
+    const result = await remoteDone(spec, {
+      transport: new FakeTransport(),
+      stateFile: false,
+      onEvent: (e) => {
+        c2.onEvent(e);
+        onEvent?.(e);
+      },
+    });
+    return { result, events: c2.events };
+  }
+  const ticks = (events: Event[]) => events.filter((e) => e.type === "tick") as Extract<Event, { type: "tick" }>[];
+
+  it("copies the top-level fetch on a schedule, before the job ends", async () => {
+    const log = t.path("job.log");
+    writeFileSync(log, "");
+    writeFileSync(t.path("part.bin"), "x");
+    const seen: boolean[] = [];
+    const { result, events } = await live(
+      { until: c.log(log, { done: /DONE/ }), interval: 10, every: { interval: 30 }, fetch: [{ from: t.path("*.bin"), to: t.path("dl") }] },
+      (e) => {
+        if (e.type !== "tick") return;
+        seen.push(existsSync(t.path("dl/part.bin")));
+        if (e.n === 2) appendFileSync(log, "DONE\n");
+      },
+    );
+    expect(result.exitCode).toBe(0);
+    expect(seen.slice(0, 2)).toEqual([true, true]);
+    expect(events.filter((e) => e.type === "fetch")).toHaveLength(1); // the final one only
+  });
+
+  it("a hook does not switch off the sync; fetch: [] does", async () => {
+    const log = t.path("job.log");
+    writeFileSync(log, "");
+    writeFileSync(t.path("part.bin"), "x");
+    const fetch = [{ from: t.path("*.bin"), to: t.path("dl") }];
+    const both = await live({ until: c.log(log, { done: /DONE/ }), interval: 10, fetch, every: { interval: 20, hook: [`echo DONE >> ${log}`] } });
+    expect(ticks(both.events)[0]?.files).toBe(1);
+    writeFileSync(log, "");
+    const hookOnly = await live({ until: c.log(log, { done: /DONE/ }), interval: 10, fetch, every: { interval: 20, fetch: [], hook: [`echo DONE >> ${log}`] } });
+    expect(ticks(hookOnly.events)[0]?.files).toBe(0);
+  });
+
+  it("failures are reported and never change the outcome", async () => {
+    const log = t.path("job.log");
+    writeFileSync(log, "");
+    const { result, events } = await live({
+      until: c.log(log, { done: /DONE/ }),
+      interval: 10,
+      every: { interval: 20, fetch: [{ from: t.path("none-*"), to: t.path("dl") }], hook: [`echo DONE >> ${log}; exit 3`] },
+    });
+    expect(result.status).toBe("done");
+    expect(result.exitCode).toBe(0);
+    expect(ticks(events)[0]?.errors.join()).toMatch(/no file matches.*exit 3/);
+  });
+
+  it("hooks see status running, and the final fetch waits for the tick in flight", async () => {
+    const log = t.path("job.log");
+    writeFileSync(log, "");
+    writeFileSync(t.path("a.bin"), "x");
+    const trace = t.path("trace");
+    const { result, events } = await live({
+      until: c.log(log, { done: /DONE/ }),
+      interval: 10,
+      fetch: [{ from: t.path("*.bin"), to: t.path("dl") }],
+      every: { interval: 20, hook: [`echo "$RD_STATUS $RD_PHASE" > ${trace}; echo DONE >> ${log}; sleep 0.3`] },
+    });
+    expect(result.exitCode).toBe(0);
+    expect(readFileSync(trace, "utf8").trim()).toBe("running every");
+    const order = events.map((e) => e.type);
+    expect(order.indexOf("matched")).toBeLessThan(order.indexOf("tick")); // polls kept running beside the tick
+    expect(order.indexOf("tick")).toBeLessThan(order.indexOf("fetch"));
+  });
+
+  it("no tick while the target is unreachable", async () => {
+    const log = t.path("job.log");
+    writeFileSync(log, "");
+    const transport = new FakeTransport();
+    transport.failNext(new TransportError("down", "connect"), 50);
+    const { events } = await run(
+      { until: c.log(log, { done: /DONE/ }), interval: 10, unreachableAfter: "2s", every: { interval: 1, hook: ["true"] } },
+      { transport },
+    );
+    expect(ticks(events)).toHaveLength(0);
+  });
+
+  it("bad specs are refused up front", () => {
+    const until = c.exitFile("/x");
+    expect(() => normalizeSpec({ until, every: { interval: "1m" } })).toThrow(/nothing to do/);
+    expect(() => normalizeSpec({ until, every: { interval: "0s", hook: ["true"] } })).toThrow(/every.interval/);
   });
 });
 

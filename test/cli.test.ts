@@ -154,6 +154,23 @@ describe("built CLI end-to-end (dist/cli.js)", () => {
     await wait(100);
   });
 
+  it("--every-hook can stop the wait through the abort path", async () => {
+    const log = t.path("j.log");
+    writeFileSync(log, "");
+    const r = await cli(["--log", log, "--done", "DONE", "--interval", "50ms", "--every", "100ms", "--every-hook", 'kill -TERM "$RD_PID"', "--on-abort", "echo aborted"]);
+    expect(r.code).toBe(143);
+    expect(r.stdout).toMatch(/aborted/);
+  });
+
+  it("--every flags: defaults, and the combinations that make no sense", async () => {
+    const base = ["--exit-file", "/r", "--fetch", "/o/*:/dl"];
+    expect(parseCli([...base, "--every", "5m", "--every-hook", "true"]).spec.every).toEqual({ interval: "5m", hook: ["true"] });
+    expect(parseCli([...base, "--every", "5m", "--every-no-fetch", "--every-hook", "true"]).spec.every?.fetch).toEqual([]);
+    expect(() => parseCli([...base, "--every-hook", "true"])).toThrow(/need --every/);
+    expect(() => parseCli([...base, "--every", "5m", "--every-no-fetch", "--every-fetch", "/x"])).toThrow(/opposites/);
+    expect(() => parseCli(["--exit-file", "/r", "--every", "5m"])).toThrow(/nothing to do/);
+  });
+
   it("exit 2 on timeout, exit 64 when stall has no source", async () => {
     const log = t.path("j.log");
     writeFileSync(log, "");

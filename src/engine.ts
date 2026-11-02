@@ -45,6 +45,7 @@ export interface NormalizedSpec {
   keepGoing: boolean;
   fetch: FetchSpec[];
   fetchOn: StatusSelector[];
+  every?: { intervalMs: number; fetch: FetchSpec[]; hook: Hook[] };
   teardown: Hook[];
   teardownOn: StatusSelector[];
   forceTeardown: boolean;
@@ -120,6 +121,14 @@ export function normalizeSpec(spec: Spec): NormalizedSpec {
   if (stallMs !== undefined) n.stallMs = stallMs;
   if (spec.progressLog) n.progressLog = spec.progressLog;
   if (spec.forceTeardownAfter !== undefined) n.forceTeardownAfterMin = spec.forceTeardownAfter;
+  if (spec.every) {
+    const hook = spec.every.hook ?? [];
+    const fetch = spec.every.fetch ?? n.fetch;
+    if (!fetch.length && !hook.length) throw new SpecError("every: nothing to do - give every.fetch, every.hook or a top-level fetch");
+    const intervalMs = parseDuration(spec.every.interval, "every.interval");
+    if (intervalMs === undefined || intervalMs <= 0) throw new SpecError("every.interval must be > 0");
+    n.every = { intervalMs, fetch, hook };
+  }
   if (spec.deadman) n.deadman = spec.deadman;
   if (spec.idempotencyCheck) n.idempotencyCheck = spec.idempotencyCheck;
   if (spec.signal) n.signal = spec.signal;
@@ -127,17 +136,18 @@ export function normalizeSpec(spec: Spec): NormalizedSpec {
     if (spec[k]?.length) n.hooks[k] = spec[k];
   }
   if (n.intervalMs <= 0) throw new SpecError("interval must be > 0");
-  for (const f of n.fetch) if (!f.from || !f.to) throw new SpecError("fetch entries need from and to");
+  for (const f of [...n.fetch, ...(n.every?.fetch ?? [])]) if (!f.from || !f.to) throw new SpecError("fetch entries need from and to");
   return n;
 }
 
 /** JSON-safe view of a normalized spec (function hooks become "<function>"). */
 export function specToJSON(n: NormalizedSpec): unknown {
   const hooks = (h: Hook[] | undefined) => h?.map(hookName);
-  const { signal: _s, hooks: phaseHooks, teardown, ...rest } = n;
+  const { signal: _s, hooks: phaseHooks, teardown, every, ...rest } = n;
   void _s;
   return {
     ...rest,
+    ...(every ? { every: { ...every, hook: hooks(every.hook) } } : {}),
     teardown: hooks(teardown),
     ...Object.fromEntries(Object.entries(phaseHooks).map(([k, v]) => [k, hooks(v)])),
   };
@@ -256,6 +266,9 @@ class Run {
   private aborted: string | undefined;
   private wakeSleep: (() => void) | undefined;
   private deadmanPid: number | undefined;
+  private tick: Promise<void> | undefined;
+  private ticks = 0;
+  private nextTickAt = 0;
   private readonly t0: number;
   private readonly startedAt: string;
 
@@ -330,6 +343,7 @@ class Run {
         sleep: (ms) => this.wait(ms),
       });
       await this.armDeadman();
+      if (s.every) this.nextTickAt = this.now() + s.every.intervalMs;
       const outcome = await this.pollLoop(evaluator);
       status = outcome.status;
       matched = outcome.matched;
@@ -435,6 +449,7 @@ class Run {
           if (late && (late.state === "done" || late.state === "fail")) return { status: late.state, ...(late.matched !== undefined ? { matched: late.matched } : {}) };
           return { status: "stalled", error: `no progress for ${formatMs(after - lastChangeAt)}` };
         }
+        this.maybeTick();
         await this.wait(this.budgetedDelay(s.intervalMs, disconnectedSince));
       } catch (e) {
         if (e instanceof AbortedError) throw e;
@@ -454,6 +469,62 @@ class Run {
         throw e;
       }
     }
+  }
+
+  /** Runs beside the polls, one tick at a time, so a long sync cannot delay spotting the end of the job. */
+  private maybeTick(): void {
+    const ev = this.spec.every;
+    if (!ev || this.tick || this.aborted || this.now() < this.nextTickAt) return;
+    this.nextTickAt = this.now() + ev.intervalMs;
+    this.tick = this.runTick(ev).finally(() => {
+      this.tick = undefined;
+    });
+  }
+
+  private async runTick(ev: NonNullable<NormalizedSpec["every"]>): Promise<void> {
+    const s = this.spec;
+    const started = this.now();
+    const n = ++this.ticks;
+    const errors: string[] = [];
+    let files = 0;
+    for (const f of ev.fetch) {
+      try {
+        files += (await this.transport.fetch(f.from, f.to, f.via)).length;
+      } catch (e) {
+        errors.push(`${f.from}: ${(e as Error).message}`);
+      }
+    }
+    const ctx: HookContext = {
+      id: s.id,
+      phase: "every",
+      status: "running",
+      target: this.transport.label,
+      fetched: [],
+      fetchOk: errors.length === 0,
+      fetchErrors: [],
+      elapsedMs: this.elapsed(),
+      startedAt: this.startedAt,
+    };
+    for (const h of ev.hook) {
+      const r = await runHook(h, ctx, { timeoutMs: s.hookTimeoutMs });
+      this.emit({ type: "hook", result: r });
+      if (r.exitCode !== 0) errors.push(`${r.name}: exit ${r.exitCode ?? "?"}`);
+    }
+    this.emit({ type: "tick", n, files, errors, ms: this.now() - started });
+  }
+
+  /** The final fetch must not race a periodic copy into the same folder. */
+  private async drainTick(): Promise<void> {
+    if (!this.tick) return;
+    let timer: NodeJS.Timeout | undefined;
+    const finished = await Promise.race([
+      this.tick.then(() => true),
+      new Promise<boolean>((r) => {
+        timer = setTimeout(() => r(false), this.spec.hookTimeoutMs);
+      }),
+    ]);
+    clearTimeout(timer);
+    if (!finished) this.emit({ type: "warn", message: `periodic work still running after ${formatMs(this.spec.hookTimeoutMs)}; continuing without it` });
   }
 
   /** Never sleep past the timeout or the unreachable deadline. */
@@ -488,6 +559,8 @@ class Run {
       ...(this.aborted ? { signal: this.aborted } : {}),
       ...(error !== undefined ? { error } : {}),
     });
+
+    await this.drainTick();
 
     // 1. fetch
     if (s.fetch.length > 0 && statusIn(s.fetchOn, status)) {

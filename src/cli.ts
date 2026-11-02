@@ -52,6 +52,12 @@ FETCH (after the terminal state, before teardown)
   --fetch 'REMOTE_GLOB[:LOCAL_DIR]'   (repeatable; default dir = --to or .)   --rsync
   --fetch-on done,fail,timeout        statuses that fetch (default) or "all"
 
+PERIODIC (while the job runs; failures are reported and never end the wait)
+  --every 30m                  copy the --fetch entries on this schedule
+  --every-fetch 'GLOB[:DIR]'   copy these instead (repeatable)      --every-no-fetch   copy nothing
+  --every-hook CMD             run this each time (repeatable); RD_STATUS=running, and
+                               kill -TERM "$RD_PID" stops the wait through the abort path
+
 HOOKS (sh -c; env RD_STATUS RD_MATCH RD_FETCHED RD_FETCH_OK RD_ELAPSED_MS RD_TARGET RD_CTX_FILE)
   --on-done CMD --on-fail CMD --on-timeout CMD --on-unreachable CMD --on-abort CMD --on-stalled CMD
   --teardown CMD               destructive cleanup; runs when (done AND fetched) or status in --teardown-on
@@ -115,6 +121,10 @@ const OPTIONS: Record<string, Opt> = {
   to: { type: "string" },
   rsync: { type: "boolean" },
   "fetch-on": { type: "string" },
+  every: { type: "string" },
+  "every-fetch": { type: "string", multiple: true },
+  "every-hook": { type: "string", multiple: true },
+  "every-no-fetch": { type: "boolean" },
   teardown: { type: "string", multiple: true },
   "teardown-on": { type: "string" },
   "force-teardown": { type: "boolean" },
@@ -297,17 +307,26 @@ export function parseCli(argv: string[]): ParsedCli {
   }
 
   // fetch
-  const fetch: FetchSpec[] = [];
   const defaultTo = str("to") ?? ".";
-  for (const f of multi("fetch")) {
+  const fetchSpec = (f: string): FetchSpec => {
     const i = f.lastIndexOf(":");
     const from = i > 0 ? f.slice(0, i) : f;
     const to = i > 0 ? f.slice(i + 1) : defaultTo;
-    fetch.push({ from, to: to || defaultTo, ...(bool("rsync") ? { via: "rsync" as const } : {}) });
-  }
+    return { from, to: to || defaultTo, ...(bool("rsync") ? { via: "rsync" as const } : {}) };
+  };
+  const fetch = multi("fetch").map(fetchSpec);
 
   const spec: Spec = { target, until };
   if (fetch.length) spec.fetch = fetch;
+  if (str("every")) {
+    spec.every = { interval: str("every") as string };
+    if (bool("every-no-fetch") && multi("every-fetch").length) throw new SpecError("--every-no-fetch and --every-fetch are opposites");
+    if (bool("every-no-fetch")) spec.every.fetch = [];
+    else if (multi("every-fetch").length) spec.every.fetch = multi("every-fetch").map(fetchSpec);
+    if (multi("every-hook").length) spec.every.hook = multi("every-hook");
+  } else if (multi("every-fetch").length || multi("every-hook").length || bool("every-no-fetch")) {
+    throw new SpecError("--every-fetch/--every-hook/--every-no-fetch need --every INTERVAL");
+  }
   const set = <K extends keyof Spec>(k: K, val: Spec[K] | undefined) => {
     if (val !== undefined) spec[k] = val;
   };
@@ -392,6 +411,9 @@ function makePrinter(json: boolean, quiet: boolean): (e: Event) => void {
         break;
       case "fetch":
         err(e.ok ? `↓ fetched ${e.files?.length ?? 0} file(s) from ${e.from} → ${e.to}` : `! fetch ${e.from} failed (attempt ${e.attempt}): ${e.error}`);
+        break;
+      case "tick":
+        if (!quiet || e.errors.length) err(`· tick ${e.n}: ${e.files} file(s) in ${formatMs(e.ms)}${e.errors.length ? `; ${e.errors.join("; ")}` : ""}`);
         break;
       case "hook": {
         const r = e.result;
