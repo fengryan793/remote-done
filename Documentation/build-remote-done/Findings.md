@@ -112,3 +112,8 @@ Cost of all six live runs: about 6 pod-minutes x6 on $0.12-0.13/h GPUs, well und
 ## 2026-11-01 - npm publish needs a TTY
 
 - `npm publish` with the Keychain token and no TTY fails with EOTP rather than printing a web-auth link. Run it in a terminal tab with `--auth-type=web` so the `/auth/cli` link appears.
+
+## 2026-11-01 - 0.1.1 no-match retry
+
+- Stopped retrying an unmatched fetch glob, but only when the terminal state proves the job ended (`jobEnded` in src/engine.ts: exit file or process gone). A blanket stop would be unsafe: a job can print its `--done` marker before its outputs exist, and the retries are the grace period that protects those files from teardown.
+- Replaced the old `attempt === fetchAttempts` break, which never changed anything because it was the last attempt anyway.

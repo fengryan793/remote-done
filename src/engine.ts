@@ -225,6 +225,28 @@ export async function* watch(spec: Spec, opts: Omit<RunOptions, "onEvent"> = {})
   return finished?.result as Result;
 }
 
+const NO_MATCH = /no file matches/;
+
+/**
+ * True when this terminal state proves the job's process is over (exit file or process gone), so
+ * an unmatched fetch glob stays unmatched. A log marker proves nothing: a job may print "DONE" and
+ * still be writing its outputs.
+ */
+function jobEnded(c: Condition, status: Status): boolean {
+  if (status !== "done" && status !== "fail" && status !== "exited") return false;
+  switch (c.kind) {
+    case "exitFile":
+    case "process":
+      return true;
+    case "all": // a fail comes from any one child, a done needs them all
+      return status === "fail" ? c.conditions.every((x) => jobEnded(x, status)) : c.conditions.some((x) => jobEnded(x, status));
+    case "any":
+      return c.conditions.every((x) => jobEnded(x, status));
+    default:
+      return false;
+  }
+}
+
 class Run {
   private readonly emit: (e: Event) => void;
   private readonly now: () => number;
@@ -469,19 +491,22 @@ class Run {
 
     // 1. fetch
     if (s.fetch.length > 0 && statusIn(s.fetchOn, status)) {
-      fetchErrors = await this.fetchAll(s.fetch, fetched);
+      const ended = jobEnded(s.until, status);
+      fetchErrors = await this.fetchAll(s.fetch, fetched, ended);
       let forced = false;
       if (status === "done" && fetchErrors.length > 0 && s.forceTeardownAfterMin !== undefined) {
         const deadline = this.now() + s.forceTeardownAfterMin * 60_000;
-        while (fetchErrors.length > 0 && this.now() < deadline && !this.aborted) {
+        const hopeless = () => ended && fetchErrors.every((e) => NO_MATCH.test(e.error));
+        while (fetchErrors.length > 0 && this.now() < deadline && !this.aborted && !hopeless()) {
           await this.wait(Math.min(30_000, Math.max(0, deadline - this.now())));
           if (this.now() >= deadline) break;
           const retry = s.fetch.filter((f) => fetchErrors.some((e) => e.from === f.from && e.to === f.to));
-          fetchErrors = await this.fetchAll(retry, fetched);
+          fetchErrors = await this.fetchAll(retry, fetched, ended);
         }
         if (fetchErrors.length > 0) {
           forced = true;
-          this.emit({ type: "warn", message: `fetch still failing after ${s.forceTeardownAfterMin} min; tearing down anyway (--force-teardown-after)` });
+          const why = hopeless() ? "the job has ended and nothing matches the fetch glob" : `fetch still failing after ${s.forceTeardownAfterMin} min`;
+          this.emit({ type: "warn", message: `${why}; tearing down anyway (--force-teardown-after)` });
         }
       }
       if (forced) s.forceTeardown = true;
@@ -568,7 +593,7 @@ class Run {
   }
 
   /** Fetch each spec with retries; returns the errors, appends successes to `fetched`. */
-  private async fetchAll(specs: FetchSpec[], fetched: string[]): Promise<FetchError[]> {
+  private async fetchAll(specs: FetchSpec[], fetched: string[], ended: boolean): Promise<FetchError[]> {
     const errors: FetchError[] = [];
     for (const f of specs) {
       let lastErr = "";
@@ -585,7 +610,7 @@ class Run {
           lastErr = (e as Error).message;
           this.emit({ type: "fetch", from: f.from, to: f.to, ok: false, error: lastErr, attempt });
           if (e instanceof HostKeyError || e instanceof AuthError) break;
-          if (e instanceof FetchFailure && /no file matches/.test(lastErr) && attempt === DEFAULTS.fetchAttempts) break;
+          if (ended && e instanceof FetchFailure && NO_MATCH.test(lastErr)) break; // nothing can create it any more
           if (attempt < DEFAULTS.fetchAttempts) await this.wait(Math.min(2_000 * 2 ** (attempt - 1), 30_000));
         }
       }

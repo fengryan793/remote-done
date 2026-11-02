@@ -36,6 +36,40 @@ async function run(spec: Spec, opts: { transport?: FakeTransport; onPoll?: (n: n
   return { result, events, transport, clock };
 }
 
+describe("fetch of a glob that matches nothing", () => {
+  const attempts = (events: Event[]) => events.filter((e) => e.type === "fetch").length;
+
+  it("stops at once when the exit file proves the job ended, and tears down", async () => {
+    writeFileSync(t.path("job.rc"), "0\n");
+    const marker = t.path("down");
+    const { result, events } = await run({
+      until: c.exitFile(t.path("job.rc")),
+      interval: 10,
+      fetch: [{ from: t.path("nothing-*"), to: t.path("dl") }],
+      teardown: [`touch ${marker}`],
+      teardownOn: ["all"],
+      forceTeardownAfter: 5,
+    });
+    expect(attempts(events)).toBe(1);
+    expect(result.exitCode).toBe(4);
+    expect(result.teardownRan).toBe(true);
+    expect(existsSync(marker)).toBe(true);
+  });
+
+  it("keeps retrying after a log marker: the job may still be writing", async () => {
+    const log = t.path("job.log");
+    writeFileSync(log, "DONE\n");
+    const { result, events } = await run({
+      until: c.log(log, { done: /DONE/, fromStart: true }),
+      interval: 10,
+      fetch: [{ from: t.path("nothing-*"), to: t.path("dl") }],
+      forceTeardownAfter: 1,
+    });
+    expect(attempts(events)).toBeGreaterThan(5);
+    expect(result.exitCode).toBe(4);
+  });
+});
+
 describe("engine terminal pipeline", () => {
   it("done -> fetch -> onDone -> teardown -> notify, exit 0, hooks get the contract", async () => {
     const log = t.path("job.log");
